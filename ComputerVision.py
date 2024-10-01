@@ -4,6 +4,11 @@ import sys
 from typing import Any
 import cv2 as cv2
 import numpy as np
+from PIL import Image
+import imagehash
+import os
+import glob
+from pathlib import Path
 
 
 def main(argv):
@@ -18,12 +23,31 @@ def main(argv):
         print('Error opening image!')
         print('Usage: hough_circle.py [image_name -- default ' + default_file + '] \n')
 
+    # perceptual_hash(filename)
     averages = average_values(image)
     # stars = star_detect(image)
     circles = circle_detect(image)
 
     print("Average value on edges: " + str(averages))
     print("Number of circles: " + str(circles))
+
+
+def perceptual_hash(filename: str) -> int:
+    img = Image.open(filename)
+    image_hash = imagehash.whash(img)
+
+    current_directory = sys.argv[1]
+    folder_path = os.path.join(current_directory, 'references')
+    files = glob.glob(os.path.join(folder_path, '*'))
+    min_similarity = 1000
+
+    for file_path in files:
+        with Image.open(file_path) as file:
+            reference_hash = imagehash.whash(file)
+            similarity = abs(image_hash - reference_hash)
+            min_similarity = similarity if similarity < min_similarity else min_similarity
+
+    return min_similarity
 
 
 def star_detect(image: cv2.Mat | np.ndarray[Any, np.dtype]):
