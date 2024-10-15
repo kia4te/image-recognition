@@ -10,9 +10,11 @@ import os
 import glob
 from pathlib import Path
 
+#TODO: Store reference perceptual hashes instead of having to bring over reference images
+#TODO: Write red circle detection
 
 def main(argv):
-    default_file = 'images/death-star2.png'
+    default_file = 'references/deathstar23.png'
     filename = argv[0] if len(argv) > 0 else default_file
 
     # Load image
@@ -23,13 +25,12 @@ def main(argv):
         print('Error opening image!')
         print('Usage: hough_circle.py [image_name -- default ' + default_file + '] \n')
 
+    red_present = red_pixels_present(image)
+    print(red_present)
     # perceptual_hash(filename)
-    averages = average_values(image)
+    # averages = average_values(image)
     # stars = star_detect(image)
-    circles = circle_detect(image)
-
-    print("Average value on edges: " + str(averages))
-    print("Number of circles: " + str(circles))
+    # circles = circle_detect(image)
 
 
 def perceptual_hash(filename: str) -> int:
@@ -50,29 +51,9 @@ def perceptual_hash(filename: str) -> int:
     return min_similarity
 
 
-def star_detect(image: cv2.Mat | np.ndarray[Any, np.dtype]):
-    ...
-
-
 def circle_detect(image: cv2.Mat | np.ndarray[Any, np.dtype]) -> int:
 
     h, w, _ = image.shape
-    # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-    # contours, hierarchy = cv2.findContours(bw, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-    #
-    # idx = 0
-    # while idx >= 0:
-    #     center, radius = cv2.minEnclosingCircle(contours[idx])
-    #     center = (int(center[0]), int(center[1]))
-    #
-    #     cv2.circle(image, center, int(radius), (0, 255, 255), 2)
-    #
-    #     idx = hierarchy[0][idx][0]
-    #
-    #     cv2.imshow("image with circles", image)
-    #     cv2.waitKey(0)
-    #     cv2.destroyAllWindows()
 
     params = cv2.SimpleBlobDetector.Params()
     params.minCircularity = 0.9
@@ -104,6 +85,42 @@ def circle_detect(image: cv2.Mat | np.ndarray[Any, np.dtype]) -> int:
     return number_of_blobs
 
 
+def red_pixels_present(image: cv2.Mat | np.ndarray[Any, np.dtype]) -> bool:
+    h, w, _ = image.shape
+    for col in range(w):
+        for row in range(h):
+            r, g, b = image[row][col]
+            if r > 100:
+                if (g+b)/r < 0.5:
+                    return True
+    return False
+
+
+# Code taken from https://github.com/ChristophRahn/red-circle-detection/blob/master/red-circle-detection.py
+def red_circle_detect(image: cv2.Mat | np.ndarray[Any, np.dtype]) -> set[list[int]]:
+    image_copy = image.copy()
+    
+    # Convert image to BGR so we can convert to lab
+    image_bgr = cv2.cvtColor(image, cv2.COLOR_RGBA2BGR)
+    image_bgr = cv2.medianBlur(image, 3)
+    image_lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    # Threshold the lab image to keep only red pixels
+    # Possible yellow threshold: [20, 110, 170][255, 140, 215]
+    # Possible blue threshold: [20, 115, 70][255, 145, 120]
+    image_lab_red = cv2.inRange(image_lab, np.array([20, 150, 150]), np.array([190, 255, 255]))
+    # Another blur to reduce noise
+    image_lab_red = cv2.GaussianBlur(image_lab_red, (5, 5), 2, 2)
+    circles = cv2.HoughCircles(image_lab_red, cv2.HOUGH_GRADIENT, 1, image_lab_red.shape[0] / 8, param1=100, param2=18, minRadius=5, maxRadius=500)
+
+    if circles is not None:
+        circles = np.round(circles[0, :].astype("int"))
+        cv2.circle(image_copy, center=(circles[0,0], circles[0, 1]), radius=circles[0, 2], color=(0, 255, 0), thickness=2)
+
+    cv2.imshow('image', image_copy)
+    if cv2.waitKey(1) & 0xFF == ('q'):
+        return circles
+
+
 def average_values(image: cv2.Mat | np.ndarray[Any, np.dtype]) -> int:
     h, w, _ = image.shape
     # Define the number of rows and columns
@@ -130,11 +147,8 @@ def average_values(image: cv2.Mat | np.ndarray[Any, np.dtype]) -> int:
 
     average_values = np.array([int(sum(i) / len(i)) for i in average_colors])
     average_values = average_values.reshape(rows, cols)
-    # print(average_values)
 
     average = sum([average_values[i][j] for i in range(rows) for j in range(cols) if bool(set([0,3]) & set([i,j]))]) // ((rows * cols) - ((rows - 2) * (cols - 2)))
-
-    # print(average)
 
     return average
 
